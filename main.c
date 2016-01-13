@@ -6,13 +6,17 @@
 #include <errno.h>
 
 #define PORT 8888
+#define REQUESTMAX 5000
 
 int
 main(){
-    int sfd, csfd;
+    int sfd, csfd, conn_status;
     struct sockaddr_in my_addr, c_addr;
-    char buffer[] = "From server";
-    char c_b[1000];
+
+    char http_status[] = "HTTP/1.0 200 OK\r\n";
+    char header[] = "Server: Pike\r\nContent-Type: text/html\r\n\r\n";
+    char body[] = "<html><head><body>From server</body></head></html>";
+    char c_b[REQUESTMAX];
     
     socklen_t c_addr_len;
     
@@ -40,20 +44,23 @@ main(){
     
     printf("start to accpet connect from client\n");
     while(1) {
-        c_addr_len = sizeof(c_addr);    
+        c_addr_len = sizeof(c_addr);
         if((csfd  = accept(sfd, (struct sockaddr *) &c_addr, &c_addr_len)) == -1) {
             printf("error on accept, sfd is %d, errno is %d \n", sfd, errno);
             exit(1);
         }
 
-        //        recv(csfd, c_b, sizeof(c_b), MSG_DONTWAIT);
-        //        printf("%s", c_b);
-        
-        send(csfd, buffer, sizeof(buffer), MSG_WAITALL);
+        if((conn_status = recv(csfd, c_b, sizeof(c_b), 0)) == -1) {
+            printf("error on recv, errno is %d \n", errno);
+            exit(1);
+        }
+        printf("%s", c_b);
+
+        send(csfd, http_status, sizeof(http_status), MSG_DONTWAIT);
+        send(csfd, header, sizeof(header), MSG_DONTWAIT);    
+        send(csfd, body, sizeof(body), MSG_DONTWAIT);
+        close(csfd);
     }
-    
     close(sfd);
-    close(csfd);
-    
     return 0;
 }
