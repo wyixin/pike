@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 
 #define PORT 8888
 #define REQUESTMAX 5000
@@ -16,8 +17,6 @@ main(){
     char http_status[] = "HTTP/1.0 200 OK\r\n";
     char header[] = "Server: Pike\r\nContent-Type: text/html\r\n\r\n";
     char body[] = "<html><head><body>From server</body></head></html>";
-    char c_b[REQUESTMAX];
-    
     socklen_t c_addr_len;
     
     my_addr.sin_family = AF_INET;
@@ -44,6 +43,7 @@ main(){
     
     printf("start to accpet connect from client\n");
     while(1) {
+        char *c_b = malloc(sizeof(char) * REQUESTMAX);
         c_addr_len = sizeof(c_addr);
         if((csfd  = accept(sfd, (struct sockaddr *) &c_addr, &c_addr_len)) == -1) {
             printf("error on accept, sfd is %d, errno is %d \n", sfd, errno);
@@ -56,10 +56,11 @@ main(){
         }
         printf("%s", c_b);
 
-        send(csfd, http_status, sizeof(http_status), MSG_DONTWAIT);
-        send(csfd, header, sizeof(header), MSG_DONTWAIT);    
-        send(csfd, body, sizeof(body), MSG_DONTWAIT);
+        send(csfd, http_status, strlen(http_status), MSG_DONTWAIT);
+        send(csfd, header, strlen(header), MSG_DONTWAIT);    
+        send(csfd, body, strlen(body), MSG_DONTWAIT);
         close(csfd);
+        free(c_b);
     }
     close(sfd);
     return 0;
