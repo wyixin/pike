@@ -7,20 +7,20 @@
 #include <string.h>
 
 #define PORT 8888
-#define REQUESTMAX 5000
+#define REQUESTMAX 1024*8
 
-int
-main(){
-    int sfd, csfd, conn_status;
+struct pikeServer{
+    int port;
+    int fd;
+    int pid;
+} server;
+
+int startTcpServer(int port) {
+    int sfd;
     struct sockaddr_in my_addr, c_addr;
-
-    char http_status[] = "HTTP/1.0 200 OK\r\n";
-    char header[] = "Server: Pike\r\nContent-Type: text/html\r\n\r\n";
-    char body[] = "<html><head><body>From server</body></head></html>";
-    socklen_t c_addr_len;
     
     my_addr.sin_family = AF_INET;
-    my_addr.sin_port = htons (PORT);
+    my_addr.sin_port = htons (port);
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if((sfd = socket(PF_INET, SOCK_STREAM, 0)) == -1){
@@ -42,11 +42,30 @@ main(){
     }
     
     printf("start to accpet connect from client\n");
+    
+    return sfd;
+}
+
+void initServer(void) {
+    server.port = PORT;
+    server.fd = startTcpServer(server.port);
+}
+
+void processingClientRequest() {
+
+    int conn_status, csfd;
+    struct sockaddr_in c_addr;
+    char http_status[] = "HTTP/1.0 200 OK\r\n";
+    char header[] = "Server: Pike\r\nContent-Type: text/html\r\n\r\n";
+    char body[] = "<html><head><body>From server</body></head></html>";
+    socklen_t c_addr_len;
+
+
     while(1) {
         char *c_b = malloc(sizeof(char) * REQUESTMAX);
         c_addr_len = sizeof(c_addr);
-        if((csfd  = accept(sfd, (struct sockaddr *) &c_addr, &c_addr_len)) == -1) {
-            printf("error on accept, sfd is %d, errno is %d \n", sfd, errno);
+        if((csfd  = accept(server.fd, (struct sockaddr *) &c_addr, &c_addr_len)) == -1) {
+            printf("error on accept, sfd is %d, errno is %d \n", server.fd, errno);
             exit(1);
         }
 
@@ -62,6 +81,20 @@ main(){
         close(csfd);
         free(c_b);
     }
-    close(sfd);
+
+}
+
+void stopServer() {
+    free(&server);
+}
+
+int main(){
+
+    initServer();
+
+    processingClientRequest();
+
+    stopServer();
+    
     return 0;
 }
