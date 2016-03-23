@@ -7,9 +7,11 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <signal.h>
 
 #define PORT 8888
 #define REQUESTMAX 1024*8
+#define PIKE_IO_BUF_LEN 1024
 
 struct pikeServer{
     int port;
@@ -77,17 +79,13 @@ void addToClients(int fd) {
 
 void processingClientRequest() {
 
-    int conn_status, csfd, i;
-    struct sockaddr_in c_addr;
+    int i, retval;
     char http_status[] = "HTTP/1.0 200 OK\r\n";
     char header[] = "Server: Pike\r\nContent-Type: text/html\r\n\r\n";
     char body[] = "<html><head><body>From server</body></head></html>";
-    socklen_t c_addr_len;
     fd_set readset, writeset;
     
     while(1) {
-        c_addr_len = sizeof(c_addr);
-
         FD_ZERO(&readset);
         
         FD_SET(server.fd, &readset);
@@ -96,39 +94,47 @@ void processingClientRequest() {
                 FD_SET(server.clients[i], &readset);
         }
         
-        if(select(server.maxfd+1, &readset, NULL, NULL, NULL) < 0) {
-            printf("select");
-            return;
-        }
-
+        retval = select(server.maxfd+1, &readset, NULL, NULL, NULL);
+        printf("retval: %d\n", retval);
+        
+        if(retval <= 0)
+            continue;
+        
         if(FD_ISSET(server.fd, &readset)) {
             // handle accept
-            if((csfd  = accept(server.fd, (struct sockaddr *) &c_addr, &c_addr_len)) == -1) {
+            int csfd;
+            struct sockaddr_in sa;
+            unsigned int saLen;
+            saLen = sizeof(sa);
+
+            if((csfd  = accept(server.fd, (struct sockaddr *) &sa, &saLen)) == -1) {
                 printf("error on accept, sfd is %d, errno is %d \n", server.fd, errno);
                 exit(1);
             }
+
+            printf("handle request, client fd is: %d\n", csfd);
+            
             setNonBlocking(csfd);
             addToClients(csfd);
         } else {
             // handle client msg
             for(i=0; i<10; i++) {
-                if(server.clients[i] != 0 && FD_ISSET(server.clients[i], &readset)) {
-
-                    char *c_b = malloc(sizeof(char) * REQUESTMAX);
-
-                    if((conn_status = recv(server.clients[i], c_b, sizeof(c_b), 0)) == -1) {
+                int fd = server.clients[i];
+                if(fd != 0 && FD_ISSET(fd, &readset)) {
+                    char buf[PIKE_IO_BUF_LEN];
+                    int conn_status;
+    
+                    if((conn_status = read(fd, buf, PIKE_IO_BUF_LEN)) == -1) {
                         printf("error on recv, errno is %d \n", errno);
                         exit(1);
                     }
-                    printf("%s", c_b);
-                    free(c_b);
+                    printf("here is requese: %s\n", buf);
                     
-                    sleep(1);
-                    send(server.clients[i], http_status, strlen(http_status), MSG_DONTWAIT);
-                    send(server.clients[i], header, strlen(header), MSG_DONTWAIT);    
-                    send(server.clients[i], body, strlen(body), MSG_DONTWAIT);
-                    FD_CLR(server.clients[i], &readset);
-                    close(server.clients[i]);
+                    sleep(10);
+                    write(fd, "hello \n", 7);
+                    //write(fd, body, strlen(body));
+                    FD_CLR(fd, &readset);
+                    close(fd);
                     server.clients[i] = 0;
                 }
             }
@@ -137,12 +143,17 @@ void processingClientRequest() {
 }
 
 void stopServer() {
-    free(&server);
+    close(server.fd);
+    printf("catch!\n");
+    //free(&server);
+    exit(0);
 }
 
 int main(){
 
     initServer();
+
+    signal(SIGINT, stopServer);
 
     processingClientRequest();
 
